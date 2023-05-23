@@ -39,6 +39,13 @@ class commands_minigame(commands.Cog):
                 "lose": 0
             }
 
+        if player_id in self.rob_cooldown:
+            remaining_time = self.rob_cooldown[player_id] - time.time()
+            if remaining_time > 0:
+                minutes, seconds = divmod(int(remaining_time), 60)
+                await ctx.send(f"Du musst noch {minutes} Minuten und {seconds} Sekunden warten, bevor du das wieder tun kannst.")
+                return
+
         payout = 200000
         self.player_data[player_id]["money"] += payout
         self.save_data()
@@ -47,6 +54,16 @@ class commands_minigame(commands.Cog):
         embed.add_field(name="Betrag", value=f"{payout} Euro", inline=False)
         embed.set_footer(text=f"Dein neuer Kontostand: {self.player_data[player_id]['money']} Euro")
         await ctx.send(embed=embed)
+
+        self.rob_cooldown[player_id] = time.time() + 86400 - remaining_time  # Aktualisiere den Cooldown-Timer
+
+    @daily.error
+    async def daily_error(self, ctx, error):
+        if isinstance(error, commands.CommandOnCooldown):
+            remaining_time = error.retry_after
+            minutes, seconds = divmod(int(remaining_time), 60)
+            await ctx.send(f"Du musst noch {minutes} Minuten und {seconds} Sekunden warten, bevor du das wieder tun kannst.")
+
 
     @commands.command()
     async def leaderboard(self, ctx):
@@ -119,6 +136,37 @@ class commands_minigame(commands.Cog):
             remaining_time = error.retry_after
             minutes, seconds = divmod(int(remaining_time), 60)
             await ctx.send(f"Du musst noch {minutes} Minuten und {seconds} Sekunden warten, bevor du das wieder tun kannst.")
+
+    @commands.command()
+    async def cflip(self, ctx, bet: int):
+        player_id = str(ctx.author.id)
+        if player_id not in self.player_data:
+            await ctx.send("Du hast noch keinen Account.")
+            return
+
+        if bet <= 0:
+            await ctx.send("Der Einsatz muss größer als 0 sein.")
+            return
+
+        if self.player_data[player_id]["money"] < bet:
+            await ctx.send("Du hast nicht genug Geld.")
+            return
+
+        outcomes = ["win", "lose"]
+        outcome = random.choices(outcomes, weights=[0.25, 0.75], k=1)[0]  # Gleichgewichtige Gewinnchance
+
+        if outcome == "win":
+            winnings = bet * 2
+            self.player_data[player_id]["money"] += winnings
+            self.player_data[player_id]["win"] += 1
+            self.save_data()
+            await ctx.send(f"Du hast gewonnen! Du erhältst {winnings} Euro.")
+        else:
+            self.player_data[player_id]["money"] -= bet
+            self.player_data[player_id]["lose"] += 1
+            self.save_data()
+            await ctx.send(f"Du hast verloren! Du verlierst {bet} Euro.")
+
 
     def save_data(self):
         with open('player_data.csv', 'w', newline='') as csvfile:
