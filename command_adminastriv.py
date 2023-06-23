@@ -1,4 +1,5 @@
 import discord
+import datetime
 from discord.ext import commands
 
 class command_adminastriv(commands.Cog):
@@ -29,7 +30,13 @@ class command_adminastriv(commands.Cog):
         message = await ctx.fetch_message(message_id)
         await message.clear_reactions()
         await self.show_result(message, ctx)
-
+       
+    @commands.command()
+    async def uptime(self, ctx):
+        delta = datetime.datetime.utcnow() - self.bot.start_time
+        uptime = str(delta).split(".")[0]
+        await ctx.send(f"I have been connected for {uptime}.")
+        
     async def show_result(self, message, ctx):
         reactions = message.reactions
         upvotes = 0
