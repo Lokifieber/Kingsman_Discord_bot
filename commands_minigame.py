@@ -318,14 +318,6 @@ class commands_minigame(commands.Cog):
         target_money = self.player_data[target_id]["money"]
         win_chance = self.player_data[player_id].get("win_chance", 0.3)
 
-        if player_money < 50000:
-            await ctx.send("Du hast nicht genug Geld, um einen Überfall zu starten.")
-            return
-
-        if target_money < 50000:
-            await ctx.send("Der angegebene Spieler hat nicht genug Geld, um überfallen zu werden.")
-            return
-
         equipment_options = {
             "🔫": {"name": "Pistole und eine einfache Weste", "cost": 50000, "chance": 0.4},
             "🃏": {"name": "AR-15 Kit mit einer guten Rebellenweste", "cost": 100000, "chance": 0.5},
@@ -364,19 +356,24 @@ class commands_minigame(commands.Cog):
         max_steal_amount = int(target_money * 0.3)  # Maximal 30 % des Geldes des angegriffenen Spielers
         steal_amount = min(max_steal_amount, player_money)
 
-        self.player_data[player_id]["money"] -= steal_amount
+        player_money -= steal_amount
 
         await ctx.send("Es wird nach Beute gesucht... (Dauer: 30 Sekunden)")
         await asyncio.sleep(30)
 
         outcome = random.choices(["win", "lose"], weights=[win_chance, 1 - win_chance])[0]
         if outcome == "win":
-            payout = steal_amount
-            self.player_data[target_id]["money"] -= payout
+            max_payout = min(steal_amount, target_money)
+            payout = random.randint(0, max_payout)
+            player_money += payout
+            target_money -= payout
         else:
             payout = min(player_money, 100000)  # Maximal den aktuellen Kontostand des Spielers
-            self.player_data[player_id]["money"] -= payout
-            self.player_data[target_id]["money"] += payout
+            player_money -= payout
+            target_money += payout
+
+        self.player_data[player_id]["money"] = player_money
+        self.player_data[target_id]["money"] = target_money
 
         self.player_data[player_id]["win"] += 1 if outcome == "win" else 0
         self.player_data[player_id]["lose"] += 1 if outcome == "lose" else 0
@@ -385,14 +382,16 @@ class commands_minigame(commands.Cog):
 
         embed = discord.Embed(title="Überfallergebnis", color=discord.Color.gold())
         embed.add_field(name="Eingesetzte Ausrüstung", value=equipment_name, inline=False)
-        embed.add_field(name="Erbeuteter Betrag", value=f"{payout} Euro", inline=False)
+        if outcome == "win":
+            embed.add_field(name="Erbeuteter Betrag", value=f"{payout} Euro", inline=False)
+        else:
+            embed.add_field(name="Verlorener Betrag", value=f"{payout} Euro", inline=False)
         if outcome == "win":
             embed.description = f"{ctx.author.mention} hat {target.mention} erfolgreich überfallen."
         else:
             embed.description = f"{ctx.author.mention} hat versucht, {target.mention} zu überfallen, aber es ist fehlgeschlagen."
-        embed.set_footer(text=f"Dein neuer Kontostand: {self.player_data[player_id]['money']} Euro")
+        embed.set_footer(text=f"Dein neuer Kontostand: {player_money} Euro")
         await ctx.send(embed=embed)
-
         self.save_data()
 
     @robuser.error
@@ -402,7 +401,7 @@ class commands_minigame(commands.Cog):
             minutes, seconds = divmod(int(remaining_time), 60)
             await ctx.send(f"Du musst noch {minutes} Minuten und {seconds} Sekunden warten, bevor du das wieder tun kannst.")
 
-    
+
     def save_data(self):
         with open('player_data.csv', 'w', newline='') as csvfile:
             fieldnames = ["player_id", "money", "win", "lose", "last_daily", "streak"]
